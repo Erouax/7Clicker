@@ -17,51 +17,78 @@ import com.ruffian7.sevenclicker.gui.ClickerGui;
 import com.ruffian7.sevenclicker.listener.KeyListener;
 import com.ruffian7.sevenclicker.listener.MouseListener;
 
-public class AutoClicker {
+public class AutoClicker implements Runnable {
+	
+	private static final Random RANDOM = new Random();
 
-	public static Robot robot;
-	public static Point mousePos;
-	public static ClickerGui gui = new ClickerGui();
+	public final ClickerGui gui;
+	
+	private final ImageIcon buttonOff;
+	private final ImageIcon buttonOn;
+	public final Robot robot;
+	
+	public Point mousePos;
 
-	public static boolean toggled = false;
-	public static boolean activated = false;
-	public static boolean skipNext = false;
-	public static boolean blockHit = false;
+	public boolean activated;
+	public boolean blockHit;
+	public boolean skipNext;
+	public boolean toggled;
 
-	private static int delay = -1;
-	public static long lastTime = 0;
-	public static int minCPS = 8;
-	public static int maxCPS = 12;
-	public static int button = 1;
+	private int delay = -1;
+	public long lastTime = 0;
+	public int minCPS = 8;
+	public int maxCPS = 12;
+	public int button = 1;
 
-	public static String[] toggleKey = { "", "" };
-	public static int toggleMouseButton = 3;
-
+	public String[] toggleKey = { "", "" };
+	public int toggleMouseButton = 3;
+	
+	public AutoClicker() {
+		this.gui = new ClickerGui();
+		
+		this.buttonOn = new ImageIcon(this.getClass().getClassLoader().getResource("assets/power_button_on.png"));
+		this.buttonOff = new ImageIcon(this.getClass().getClassLoader().getResource("assets/power_button.png"));
+		
+		Robot robot;
+		try {
+			robot = new Robot();
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+		this.robot = robot;
+	}
+	
 	public static void main(String[] args) {
 		LogManager.getLogManager().reset();
 		Logger.getLogger(GlobalScreen.class.getPackage().getName()).setLevel(Level.OFF);
 
 		try {
-			robot = new Robot();
 			GlobalScreen.registerNativeHook();
 			GlobalScreen.addNativeMouseListener(new MouseListener());
 			GlobalScreen.addNativeKeyListener(new KeyListener());
 		} catch (NativeHookException | AWTException e) {
-			e.printStackTrace();
+			throw new RuntimeException(e);
 		}
-
+		
+		new Thread(new AutoClicker()).start();
+	}
+	
+	public void run() {
 		try {
 			while (true) {
 				Thread.sleep(1);
-				Random random = new Random();
-				if (delay == -1)
-					delay = random.nextInt((1000 / minCPS) - (1000 / maxCPS) + 1) + (1000 / maxCPS);
-
-				if (activated && toggled && !gui.focused) {
-					if (System.currentTimeMillis() - lastTime >= delay) {
-						click();
-						lastTime = System.currentTimeMillis();
-						delay = random.nextInt((1000 / minCPS) - (1000 / maxCPS) + 1) + (1000 / maxCPS);
+				
+				if (this.delay == -1) {
+					this.randomiseDelay();
+				}
+				
+				if (this.activated && this.toggled && !this.gui.focused) {
+					if (System.currentTimeMillis() - this.lastTime >= this.delay) {
+						this.lastTime = System.currentTimeMillis();
+						
+						this.click();
+						
+						this.randomiseDelay();
 					}
 				}
 			}
@@ -69,31 +96,54 @@ public class AutoClicker {
 			e.printStackTrace();
 		}
 	}
+	private int click() {
+		this.skipNext = true;
+		
+		this.robot.mousePress((this.button == 1) ? 16 : 4);
+		
+		int sleep = this.sleepRandom();
+		
+		this.robot.mouseRelease((this.button == 1) ? 16 : 4);
 
-	private static void click() {
-		skipNext = true;
-		robot.mousePress((button == 1) ? 16 : 4);
-		robot.mouseRelease((button == 1) ? 16 : 4);
-
-		if (blockHit) {
-			robot.mousePress((button == 1) ? 4 : 16);
-			robot.mouseRelease((button == 1) ? 4 : 16);
+		if (this.blockHit) {
+			sleep += this.sleepRandom();
+			
+			this.robot.mousePress((button == 1) ? 4 : 16);
+			
+			sleep += this.sleepRandom();
+			
+			this.robot.mouseRelease((button == 1) ? 4 : 16);
 		}
+		
+		return sleep;
 	}
-
-	public static void toggle() {
-		if (AutoClicker.toggled) {
-			AutoClicker.toggled = false;
-			AutoClicker.gui.powerButton
-					.setIcon(new ImageIcon(AutoClicker.class.getClassLoader().getResource("assets/power_button.png")));
+	
+	public void toggle() {
+		if (this.toggled) {
+			this.gui.powerButton.setIcon(this.buttonOff);
 		} else {
-			AutoClicker.toggled = true;
-			AutoClicker.gui.powerButton.setIcon(
-					new ImageIcon(AutoClicker.class.getClassLoader().getResource("assets/power_button_on.png")));
+			this.gui.powerButton.setIcon(this.buttonOn);
 		}
+		
+		this.toggled = !this.toggled;
 
-		AutoClicker.activated = false;
-		AutoClicker.skipNext = false;
-		AutoClicker.blockHit = false;
+		this.activated = false;
+		this.skipNext = false;
+		this.blockHit = false;
 	}
+
+	private int sleepRandom() {
+		int sleep = RANDOM.nextInt(35) + 5;
+		try {
+			Thread.sleep(sleep);
+		} catch (InterruptedException e) {
+			throw new RuntimeException(e);
+		}
+		return sleep;
+	}
+
+	private void randomiseDelay() {
+		this.delay = RANDOM.nextInt((1000 / this.minCPS) - (1000 / this.maxCPS) + 1) + (1000 / this.maxCPS);
+	}
+
 }
